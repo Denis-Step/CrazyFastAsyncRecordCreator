@@ -41,13 +41,13 @@ no new tasks should be scheduled on an executor that has already completed proce
 Message @denis-step privately if you encounter this issue*. 
 2) Assign a uniform number of records to each partition. 
 E.g. if creating 100MM records on 1k executors with 2 partitions per cluster, we would ideally
-partition 100k records into each partition. 
-3) For each partition, call `FooPojoCreator`. This is the CPU-intensive work. This step represents
+write 50k records from each partition. 
+4) For each partition, call `FooPojoCreator`. This is the CPU-intensive work. This step represents
 creating high-fidelity test data, such as large JSON's with semantically meaningful values.
 Compressed data or base64'ed data may be included. 
-4) For all of the **supplementary data** required for each `FooPojo`, call the `DynamoDbPublisher`.
-5) Await the `DynamoDbPublisher`.
-6) Write out the `FooPojo`. All of the records should exist in DynamoDb.
+5) For all of the **supplementary data** required for each `FooPojo`, call the `DynamoDbPublisher`.
+6) Await the `DynamoDbPublisher`.
+7) Write out the `FooPojo`. All of the records should exist in DynamoDb.
 
 ## DynamoDbPublisher
 
@@ -108,3 +108,4 @@ task will not make progress.
 In practice, only #2 has been observed. This can be obviated by tightly controlling the number of 
 executors and partitions. If all executors are available on job submission, and no partitions must
 wait for an executor, this error mode is unlikely.
+
