@@ -36,7 +36,7 @@ public final class FooPojoSparkPublisherApp {
 
   public static void main(String[] args) {
     int partitions = Integer.parseInt(System.getProperty("foo.partitions", "50"));
-    int numRecords = Integer.parseInt(System.getenv().getOrDefault("RECORDS_TO_WRITE", "10000"));
+    int numRecords = Integer.parseInt(System.getenv().getOrDefault("RECORDS_TO_WRITE", "10000000"));
 
     int recordsPerPartition = numRecords / partitions;
 
