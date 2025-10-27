@@ -2,7 +2,6 @@ package com.example.submission.dynamo;
 
 import com.example.submission.pojo.FooPojo;
 import com.example.submission.pojo.ShimUtil;
-import java.io.Closeable;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +20,6 @@ import software.amazon.awssdk.http.nio.netty.NettyNioAsyncHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemRequest;
-import software.amazon.awssdk.services.dynamodb.model.BatchWriteItemResponse;
 import software.amazon.awssdk.services.dynamodb.model.PutRequest;
 import software.amazon.awssdk.services.dynamodb.model.WriteRequest;
 
@@ -38,6 +36,7 @@ public class DynamoPublisher<T>  {
 
   private static final int MAX_NUM_RETRIES = 9;
   private static final int BATCH_SIZE = 25;
+  private static final int DEFAULT_MAX_QUEUE_SIZE = 10_000;
 
   private final String dynamoTableName;
   private final DynamoDbAsyncClient dynamoDbAsyncClient;
@@ -58,24 +57,24 @@ public class DynamoPublisher<T>  {
   public DynamoPublisher(
       @NonNull String dynamoTableName,
       @NonNull DynamoDbAsyncClient dynamoDbAsyncClient) {
-    this(dynamoTableName, dynamoDbAsyncClient, new LinkedBlockingDeque<>(), 32);
+    this(dynamoTableName, dynamoDbAsyncClient, DEFAULT_MAX_QUEUE_SIZE, 32);
   }
 
   public DynamoPublisher(
       @NonNull String dynamoTableName,
       @NonNull DynamoDbAsyncClient dynamoDbAsyncClient,
       int maxInFlight) {
-    this(dynamoTableName, dynamoDbAsyncClient, new LinkedBlockingDeque<>(), maxInFlight);
+    this(dynamoTableName, dynamoDbAsyncClient, DEFAULT_MAX_QUEUE_SIZE, maxInFlight);
   }
 
   public DynamoPublisher(
       @NonNull String dynamoTableName,
       @NonNull DynamoDbAsyncClient dynamoDbAsyncClient,
-      @NonNull BlockingDeque<T> recordQueue,
+      int maxQueueSize,
       int maxInFlight) {
     this.dynamoTableName = dynamoTableName;
     this.dynamoDbAsyncClient = dynamoDbAsyncClient;
-    this.recordQueue = recordQueue;
+    this.recordQueue = new LinkedBlockingDeque<>(maxQueueSize);
     this.maxInFlight = Math.max(1, maxInFlight);
     this.semaphore = new Semaphore(this.maxInFlight);
     this.publisherTask = CompletableFuture.runAsync(this::publisherLoop, HANDOFF_EXECUTOR);
@@ -195,7 +194,7 @@ public class DynamoPublisher<T>  {
                     .writeTimeout(Duration.ofMinutes(5))
                 )
                 .build(),
-            new LinkedBlockingDeque<>(1_000_000),
+            1_000_000,
             5_000);
 
 

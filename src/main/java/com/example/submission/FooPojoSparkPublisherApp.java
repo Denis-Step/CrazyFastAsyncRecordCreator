@@ -5,22 +5,15 @@ import com.example.submission.dynamo.DynamoPublisher.DynamoPublisherCreator;
 import com.example.submission.pojo.FooPojo;
 import com.example.submission.pojo.FooPojoCreator;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.MapPartitionsFunction;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.SparkSession;
-import software.amazon.awssdk.regions.Region;
-import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient;
 
 /**
  * Spark entry point that synthesizes {@link FooPojo} records per partition and publishes them via a
@@ -45,7 +38,6 @@ public final class FooPojoSparkPublisherApp {
     SPARK.range(0, partitions)
         .coalesce(partitions)
         .mapPartitions((MapPartitionsFunction<Long, FooPojo>) iterator -> {
-          // empty partition defensive check.
 
 
           List<FooPojo> fooPojos = new ArrayList<>();
@@ -78,7 +70,7 @@ public final class FooPojoSparkPublisherApp {
 
         // 4. Write everything out to an s3 file or local
         .write()
-        .json("fooPojos" + UUID.randomUUID().toString());
+        .json("fooPojos" + UUID.randomUUID());
 
   }
 }
