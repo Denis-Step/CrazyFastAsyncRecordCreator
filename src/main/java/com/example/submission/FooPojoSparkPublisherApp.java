@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.TimeUnit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -27,6 +28,7 @@ public final class FooPojoSparkPublisherApp {
   private FooPojoSparkPublisherApp() {
   }
 
+  public static ConcurrentLinkedQueue<FooPojo> allFooPojos = new ConcurrentLinkedQueue<>();
   public static void main(String[] args) {
     int partitions = Integer.parseInt(System.getProperty("foo.partitions", "50"));
     int numRecords = Integer.parseInt(System.getenv().getOrDefault("RECORDS_TO_WRITE", "10000000"));
@@ -39,7 +41,6 @@ public final class FooPojoSparkPublisherApp {
         .coalesce(partitions)
         .mapPartitions((MapPartitionsFunction<Long, FooPojo>) iterator -> {
 
-
           List<FooPojo> fooPojos = new ArrayList<>();
           // 1. Create FooPojos.
           for (int i = 0; i < recordsPerPartition; i++) {
@@ -49,15 +50,13 @@ public final class FooPojoSparkPublisherApp {
 
             // 2. Non-blocking publish (unless queue full, then block).
             fooPojos.add(fooPojo);
+            allFooPojos.add(fooPojo);
             DynamoPublisherCreator.getInstance().publish(fooPojo);
           }
 
           return fooPojos.iterator();
-
         }, Encoders.bean(FooPojo.class))
-
         // 3. Await all async publishers.
-
         .mapPartitions( (MapPartitionsFunction<FooPojo, FooPojo>) iterator -> {
           try {
             CompletableFuture.allOf(DynamoPublisherCreator.getInstance().close())
@@ -66,11 +65,13 @@ public final class FooPojoSparkPublisherApp {
           } catch (Exception e) {
             throw new RuntimeException(e);
           }
-        }, Encoders.bean(FooPojo.class) )
+        }, Encoders.bean(FooPojo.class))
 
         // 4. Write everything out to an s3 file or local
         .write()
         .json("fooPojos" + UUID.randomUUID());
 
+    System.out.println("Size of Foo Pojos: " + allFooPojos.size());
+    System.out.println(SPARK);
   }
 }
