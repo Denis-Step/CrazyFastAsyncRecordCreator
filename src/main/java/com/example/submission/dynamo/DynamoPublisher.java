@@ -43,7 +43,8 @@ public class DynamoPublisher<T>  {
   private final BlockingDeque<T> recordQueue;
   private final Semaphore semaphore;
   private final int maxInFlight;
-  private final CompletableFuture<Void> publisherTask;
+  private volatile CompletableFuture<Void> publisherTask;
+  private volatile boolean closed = false;
 
   private static final java.util.concurrent.ExecutorService HANDOFF_EXECUTOR =
       Executors.newFixedThreadPool(1, r -> {
@@ -77,7 +78,7 @@ public class DynamoPublisher<T>  {
     this.recordQueue = new LinkedBlockingDeque<>(maxQueueSize);
     this.maxInFlight = Math.max(1, maxInFlight);
     this.semaphore = new Semaphore(this.maxInFlight);
-    this.publisherTask = CompletableFuture.runAsync(this::publisherLoop, HANDOFF_EXECUTOR);
+    startPublisherTaskIfNeeded();
   }
 
   /**
@@ -85,14 +86,22 @@ public class DynamoPublisher<T>  {
    */
   @SneakyThrows
   public void publish(@NonNull T record) {
+    startPublisherTaskIfNeeded();
     recordQueue.put(record);
   }
 
   public CompletableFuture<Void> close() {
     shutdownRequested = true;
-    publisherTask.join();
-    dynamoDbAsyncClient.close();
-    return publisherTask;
+    CompletableFuture<Void> task = publisherTask;
+    if (task != null) {
+      task.join();
+    }
+    // Do NOT close the Dynamo client here; allow restarting the loop later.
+    return task == null ? CompletableFuture.completedFuture(null) : task;
+  }
+
+  public boolean isClosed() {
+    return closed;
   }
 
   @SneakyThrows
@@ -109,6 +118,19 @@ public class DynamoPublisher<T>  {
       BatchWriteItemRequest request = batchWriteItemRequest(recordsToPublish);
       semaphore.acquire();
       createBatchWriteFuture(request, 0);
+    }
+    // Intentionally sleep after draining to help reproduce stall scenarios in tests.
+    try {
+      Thread.sleep(Duration.ofSeconds(1).toMillis());
+    } catch (InterruptedException ie) {
+      Thread.currentThread().interrupt();
+    }
+  }
+
+  private synchronized void startPublisherTaskIfNeeded() {
+    if (publisherTask == null || publisherTask.isDone()) {
+      shutdownRequested = false;
+      publisherTask = CompletableFuture.runAsync(this::publisherLoop, HANDOFF_EXECUTOR);
     }
   }
 
